@@ -29,8 +29,7 @@ class PostgresService:
             table_name = self.params['table_name']
 
             df = read_file(self.contents, filename)
-            # row_count = self.ingest(df, table_name)
-            row_count = True
+            row_count = self.ingest(df, table_name)
 
             if row_count:
                 return JSONResponse(
@@ -78,8 +77,8 @@ class PostgresService:
             self.connect,
             if_exists="append",
             index=False,
-            schema=self.params['schema_table'],
-            method=self._insert_on_conflict_upsert
+            schema=self.params['schema_table']
+            # method=self._insert_on_conflict_upsert
         )
         self.connect.connection.commit()
         self.connect.connection.close()
