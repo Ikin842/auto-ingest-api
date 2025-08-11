@@ -11,24 +11,24 @@ from helper.generate import read_file
 
 class PostgresService:
     def __init__(self, raw : dict, contents):
-        self.connect = pg_config
-        self.result = []
-        self.params = raw
-        self.contents = contents
+        self.__result = []
+        self.__params = raw
+        self.__contents = contents
+        self.__pg_conn = pg_config
 
     def read_query(self, query):
-        df = pd.read_sql_query(query, self.connect)
-        self.connect.connection.close()
+        df = pd.read_sql_query(query, self.__pg_conn)
+        self.__pg_conn.connection.close()
         return df.to_dict(orient='records')
 
     def postgres_auto_ingest(self):
         try:
             start_time = time.time()
 
-            filename = self.params['filename']
-            table_name = self.params['table_name']
+            filename = self.__params['filename']
+            table_name = self.__params['table_name']
 
-            df = read_file(self.contents, filename)
+            df = read_file(self.__contents, filename)
             row_count = self.ingest(df, table_name)
 
             if row_count:
@@ -74,12 +74,12 @@ class PostgresService:
     def ingest(self, df, table_name: str):
         row_count = df.to_sql(
             table_name,
-            self.connect,
+            self.__pg_conn,
             if_exists="append",
             index=False,
-            schema=self.params['schema_table']
+            schema=self.__params['schema_table']
             # method=self._insert_on_conflict_upsert
         )
-        self.connect.connection.commit()
-        self.connect.connection.close()
+        self.__pg_conn.connection.commit()
+        self.__pg_conn.connection.close()
         return row_count
