@@ -1,65 +1,29 @@
 
 import time
-import traceback
 from loguru import logger
-import pandas as pd
-from io import BytesIO
-from sqlalchemy.dialects.postgresql import insert
-from config.postgres_config import pg_config
-from starlette.responses import JSONResponse
+from config.base import settings
 from helper.generate import read_file
+from sqlalchemy import URL, create_engine
+from sqlalchemy.dialects.postgresql import insert
+from models.response import (
+    error_response,
+    success_response
+)
 
 class PostgresService:
     def __init__(self, raw : dict, contents):
         self.__result = []
         self.__params = raw
         self.__contents = contents
-        self.__pg_conn = pg_config
+        self.__url = URL.create(
+            drivername=settings.POSTGRE_NAME,
+            username=settings.POSTGRE_USERNAME,
+            password=settings.POSTGRE_PASSWORD,
+            host=settings.POSTGRE_HOST,
+            port=settings.POSTGRE_PORT,
+            database=settings.POSTGRE_DATABASE,
+        )
 
-    def read_query(self, query):
-        df = pd.read_sql_query(query, self.__pg_conn)
-        self.__pg_conn.connection.close()
-        return df.to_dict(orient='records')
-
-    def postgres_auto_ingest(self):
-        try:
-            start_time = time.time()
-
-            filename = self.__params['filename']
-            table_name = self.__params['table_name']
-
-            df = read_file(self.__contents, filename)
-            row_count = self.ingest(df, table_name)
-
-            if row_count:
-                return JSONResponse(
-                    content={
-                        "execute_time": round(time.time() - start_time, 4),
-                        "message": "success",
-                        "status_code": 200,
-                        "data": df.to_dict(orient="records")
-                    }
-                )
-
-            else:
-                return JSONResponse(
-                    status_code=500,
-                    content={
-                        "message": "Internal Server Error",
-                        "status_code": 500,
-                        "data": [],
-                    }
-                )
-
-        except Exception as e:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "message": f"Internal Server Error {e}",
-                    "status_code": 500,
-                    "data": [],
-                }
-            )
     @staticmethod
     def _insert_on_conflict_upsert(table, conn, keys, data_iter):
         data = [dict(zip(keys, row)) for row in data_iter]
@@ -71,15 +35,47 @@ class PostgresService:
         result = conn.execute(conflict_update)
         return result.rowcount
 
+    def postgres_auto_ingest(self):
+        try:
+            start_time = time.time()
+            filename = self.__params['filename']
+            table_name = self.__params['table_name']
+            df = read_file(self.__contents, filename)
+            row_count = self.ingest(df, table_name)
+
+            if row_count:
+                return success_response(
+                    start_time=start_time,
+                    message={
+                        "status_ingest":"success",
+                        "table_name": table_name}
+                )
+
+            else:
+                return error_response("error ingest postgres")
+
+        except Exception as e:
+            return error_response(e)
+
     def ingest(self, df, table_name: str):
-        row_count = df.to_sql(
-            table_name,
-            self.__pg_conn,
-            if_exists="append",
-            index=False,
-            schema=self.__params['schema_table']
-            # method=self._insert_on_conflict_upsert
-        )
-        self.__pg_conn.connection.commit()
-        self.__pg_conn.connection.close()
-        return row_count
+        try:
+            engine = create_engine(self.__url)
+            conn = engine.connect()
+            # df = df.drop_duplicates(subset=['id'], keep='last')
+            logger.info(f"Attempting to insert {len(df)} rows into {table_name}")
+
+            row_count = df.to_sql(
+                table_name,
+                con=conn,
+                if_exists='append',
+                index=False,
+                # method=self._conflict_do_update
+            )
+            logger.info(f"Successfully inserted rows into {table_name}")
+            conn.connection.commit()
+            conn.connection.close()
+            return row_count
+
+        except Exception as e:
+            logger.error(f"Error during insert to {table_name}: {e}")
+            raise e

@@ -1,0 +1,26 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres-container
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydatabase
+    ports:
+      - "5432:5432"
+
+  fastapi:
+    build: .
+    container_name: fastapi-container
+    depends_on:
+      - postgres
+    ports:
+      - "8732:8732"
+    environment:
+      POSTGRE_HOST: postgres
+      POSTGRE_PORT: 5432
+      POSTGRE_USERNAME: myuser
+      POSTGRE_PASSWORD: mypassword
+      POSTGRE_DATABASE: mydatabase

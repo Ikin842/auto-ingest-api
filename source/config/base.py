@@ -2,16 +2,6 @@ from pydantic_settings import BaseSettings
 
 class Config(BaseSettings):
 
-    ELASTICSEARCH_HOST: str
-    ELASTICSEARCH_PORT:str
-    ELASTICSEARCH_USERNAME: str
-    ELASTICSEARCH_PASSWORD: str
-
-    S3_ENDPOINT: str
-    ACCESS_KEY: str
-    SECRET_KEY: str
-    BUCKET_NAME: str
-
     MONGODB_CLIENT:str
     MONGODB_DATABASE:str
     MONGODB_COLLECTION: str
@@ -22,6 +12,9 @@ class Config(BaseSettings):
     POSTGRE_USERNAME: str
     POSTGRE_PASSWORD: str
     POSTGRE_DATABASE: str
+
+    ELASTICSEARCH_HOST: str
+    ELASTICSEARCH_PORT:str
 
     class Config:
         env_file = '.env'

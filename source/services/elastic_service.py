@@ -1,21 +1,21 @@
+import json
 import time
 import jmespath
 from loguru import logger
 from elasticsearch import helpers
 from elasticsearch.helpers import streaming_bulk
-from config.elastic_config import conn_elastic
+from config import conn_elastic
+from models.response import success_response, error_response
+from helper.generate import clean_dirty_values
 from helper.generate import (
     read_file,
-    generate_id,
-    success_response,
-    error_response
+    generate_id
 )
 
 class ElasticService:
     def __init__(self, raw: dict, contents):
         self.__es_conn = conn_elastic
         self.__results = []
-        self.__index = "index-elasticsearch"
         self.__params = raw
         self.__contents = contents
 
@@ -25,16 +25,28 @@ class ElasticService:
         datas = df.to_dict(orient="records")
 
         for data in datas:
+            data = clean_dirty_values(data)
             doc_id = jmespath.search('id', data)
             if doc_id is None:
                 data['id'] = generate_id(data)
+
             self.__results.append((data['id'], data))
+
+            if len(self.__results) >=1000:
+                row_count = self.ingest_data(self.__results, "insert")
+                if row_count:
+                    self.__results.clear()
 
         if self.__results:
             row_count = self.ingest_data(self.__results, "insert")
             if row_count:
                 self.__results.clear()
-                return success_response(start_time, self.__results)
+                return success_response(
+                    start_time,
+                    message={
+                        "status_ingest": "success",
+                        "index_name": self.__params['index_name']
+                    })
 
         return error_response("error_ingest")
 
@@ -54,31 +66,29 @@ class ElasticService:
 
         return self.__results
 
-    @staticmethod
-    def _insert_actions(id_data_pairs, index_name):
+    def _insert_actions(self, id_data_pairs):
         for doc_id, data in id_data_pairs:
             yield {
-                "_index": index_name,
+                "_index": self.__params['index_name'],
                 "_id": doc_id,
                 "_source": data
             }
 
-    @staticmethod
-    def _update_actions(id_data_pairs, index_name):
+    def _update_actions(self, id_data_pairs):
         for doc_id, data in id_data_pairs:
             yield {
                 "_op_type": "update",
-                "_index": index_name,
+                "_index": self.__params['index_name'],
                 "_id": doc_id,
                 "doc": data,
             }
 
     def _action_generator(self, id_data_pairs, operation_type):
         if operation_type == 'insert':
-            actions_generator = self._insert_actions(id_data_pairs, self.__index)
+            actions_generator = self._insert_actions(id_data_pairs)
             return actions_generator
         elif operation_type == 'update':
-            actions_generator = self._update_actions(id_data_pairs, self.__index)
+            actions_generator = self._update_actions(id_data_pairs)
             return actions_generator
         else:
             logger.error("Invalid operation type! Choose either 'insert' or 'update'.")

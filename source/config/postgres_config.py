@@ -22,5 +22,3 @@ class PostgresConfig:
         )
         db = create_engine(url_object)
         return db.connect()
-
-pg_config = PostgresConfig(**settings.dict()).prod_conn_sql_alchemy()

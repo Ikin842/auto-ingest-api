@@ -1,5 +1,5 @@
 # version python
-FROM python:3.9-slim-buster
+FROM python:3.10-slim
 
 WORKDIR /
 
@@ -21,4 +21,4 @@ WORKDIR /app/source
 
 ENV PYTHONUNBUFFERED=1
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8732", "--workers", "5"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8732", "--reload"]
